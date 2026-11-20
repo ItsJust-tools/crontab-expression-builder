@@ -12,7 +12,8 @@ import { cn } from '@/lib/utils';
 import { generateJsonLd, generateToolMetadata } from '@/lib/seo';
 import toolConfig from '@/tool/tool.config';
 import { getPublicSiteUrl, templateMetadata } from '@/tool/template-metadata';
-import { notepadTool } from '@/tool/notepad-state';
+import { cronTool } from '@/tool/cron-state';
+import { initialState } from '@/tool/types';
 import { ToolCanvas } from '@/tool/components/tool-canvas';
 import { ToolSidebar } from '@/tool/components/tool-sidebar';
 import { ToolToolbar } from '@/tool/components/tool-toolbar';
@@ -92,40 +93,47 @@ describe('app and seo', () => {
   it('covers tool definition and helper exports', async () => {
     expect(cn('a', undefined, 'b', false, null, 'c')).toBe('a b c');
     expect(getPublicSiteUrl()).toBe('http://localhost:3000');
-    expect(notepadTool.deserialize({ content: 'x' })).toEqual({
+    expect(cronTool.deserialize({ ...initialState })).toEqual({
       success: true,
-      data: { content: 'x', title: '' },
+      data: initialState,
     });
-    expect(notepadTool.deserialize({ nope: true })).toEqual({
+    expect(cronTool.deserialize({ nope: true })).toEqual({
       success: false,
-      error: 'Invalid data format: expected { content: string, title?: string }',
+      error:
+        'Invalid data format: expected fields { seconds, minute, hour, dayOfMonth, month, dayOfWeek } as strings',
     });
-    expect(notepadTool.serialize({ content: 'x' })).toContain('"content": "x"');
-    expect(notepadTool.deserialize({ content: 'x', title: 'My Note' })).toEqual({
-      success: true,
-      data: { content: 'x', title: 'My Note' },
+    expect(cronTool.serialize(initialState)).toContain('"minute":"*/5"');
+    expect(cronTool.deserialize(null)).toEqual({
+      success: false,
+      error: 'Invalid data format: expected a JSON object',
     });
-    const exporters = (notepadTool as { exporters?: Array<{ loader: ExporterLoader }> }).exporters ?? [];
-    expect(exporters).toHaveLength(4);
+    const exporters = (cronTool as { exporters?: Array<{ loader: ExporterLoader }> }).exporters ?? [];
+    expect(exporters).toHaveLength(5);
     const first = exporters[0];
     expect(first).toBeDefined();
     if (!first) throw new Error('missing exporter');
     const png = await (first.loader as ExporterLoader)();
     const resolved = 'default' in png ? png.default : png.exporter;
-    expect(resolved.format).toBe('png');
+    expect(resolved.format).toBe('json');
+    const second = exporters[1];
+    expect(second).toBeDefined();
+    if (!second) throw new Error('missing exporter');
+    const pngFormat = await (second.loader as ExporterLoader)();
+    const pngResolved = 'default' in pngFormat ? pngFormat.default : pngFormat.exporter;
+    expect(pngResolved.format).toBe('png');
   });
 
   it('renders tool components', () => {
     render(
       <>
-        <ToolToolbar />
-        <ToolSidebar text="Hello world" fontSize={16} onFontSizeChange={() => {}} />
-        <ToolCanvas text="" fontSize={16} />
+        <ToolToolbar state={initialState} onChange={() => {}} />
+        <ToolSidebar state={initialState} />
+        <ToolCanvas state={initialState} onChange={() => {}} />
       </>
     );
 
     expect(screen.getByRole('link', { name: 'Open help page' })).toBeInTheDocument();
-    expect(screen.getByText('11')).toBeInTheDocument(); // char count for "Hello world"
-    expect(screen.getByRole('application', { name: 'Notepad canvas' })).toBeInTheDocument();
+    expect(screen.getByTestId('cron-expression')).toBeInTheDocument();
+    expect(screen.getByRole('application', { name: 'Cron builder canvas' })).toBeInTheDocument();
   });
 });

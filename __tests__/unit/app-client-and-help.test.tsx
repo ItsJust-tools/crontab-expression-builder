@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import ToolClient from '@/app/tool-client';
 import ToolClientWrapper from '@/app/tool-client-wrapper';
@@ -20,6 +20,7 @@ const mockSetData = vi.fn();
 const mockToast = vi.fn();
 const mockHandleExport = vi.fn();
 const mockImport = vi.fn();
+
 const mockToolbarActions = { canUndo: true, canRedo: true, onUndo: vi.fn(), onRedo: vi.fn() };
 
 vi.mock('@itsjust/core', () => ({
@@ -38,7 +39,7 @@ vi.mock('@itsjust/core', () => ({
   ),
   useTool: () => ({
     state: {
-      data: { text: 'Hello' },
+      data: {},
       setData: mockSetData,
       isDirty: false,
       lastSaved: 'just now',
@@ -48,29 +49,32 @@ vi.mock('@itsjust/core', () => ({
     handleExport: mockHandleExport,
     importFromFile: mockImport,
     isImporting: false,
+    isExporting: false,
+    abortExport: vi.fn(),
     toolbarActions: mockToolbarActions,
   }),
 }));
 
 vi.mock('@/tool', () => ({
   toolConfig: {
-    id: 'simple-notepad',
-    name: 'Notepad',
+    id: '1795183469',
+    name: 'Crontab Expression Builder',
     version: '1.0.0',
     features: { sidebar: true },
-    theme: { brand: 'Notepad' },
+    theme: { brand: 'Crontab Builder' },
   },
   templateBaseVersion: '1.1.0',
-  ToolCanvas: ({ text }: { text: string }) => <div>canvas:{text}</div>,
+  ToolCanvas: () => <div>canvas</div>,
   ToolToolbar: () => <div>toolbar</div>,
-  ToolSidebar: ({ text }: { text: string }) => <div>sidebar:{text}</div>,
-}));
-
-vi.mock('@/tool/notepad-state', () => ({
-  notepadTool: {
+  ToolSidebar: () => <div>sidebar</div>,
+  cronTool: {
+    id: '1795183469',
+    name: 'Crontab Expression Builder',
+    version: '1.0.0',
     serialize: (state: unknown) => JSON.stringify(state),
-    deserialize: () => ({ success: true, data: { content: 'From Shared Url', title: '' } }),
+    deserialize: () => ({ success: true, data: {} }),
   },
+  stateFromLocation: () => null,
 }));
 
 describe('app client and help page', () => {
@@ -97,7 +101,10 @@ describe('app client and help page', () => {
     render(<ToolClient />);
 
     expect(screen.getByText('toolbar')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('trigger-share'));
+    await act(async () => {
+      fireEvent.click(screen.getByText('trigger-share'));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(mockToast).toHaveBeenCalled();
   });

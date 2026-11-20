@@ -4,10 +4,11 @@ import packageJson from '../../package.json';
 export const templateBaseVersion = packageJson.version;
 
 const toolConfig = {
-  id: 'simple-notepad',
-  name: 'Notepad',
-  description: 'A clean, distraction-free notepad. Write, edit, and export your notes instantly.',
-  version: '1.3.0',
+  id: '1795183469',
+  name: 'Crontab Expression Builder',
+  description:
+    'Build cron expressions by clicking scheduling options. See a plain-English description and the next five run times, with 5- and 6-field modes, presets, and shareable links.',
+  version: '1.0.0',
   exportFormats: ['json', 'png', 'jpeg', 'webp', 'pdf'],
   features: {
     export: true,
@@ -18,17 +19,26 @@ const toolConfig = {
     darkMode: true,
   },
   theme: {
-    accent: '#10b981',
-    accentHover: '#059669',
-    accentSubtle: 'rgba(16, 185, 129, 0.08)',
-    brand: 'Notepad',
-    icon: '\u{1F4DF}',
+    accent: '#0ea5e9',
+    accentHover: '#0284c7',
+    accentSubtle: 'rgba(14, 165, 233, 0.08)',
+    brand: 'Crontab Builder',
+    icon: '⏰',
   },
   shortcuts: [
     {
-      title: 'Notepad',
+      title: 'Crontab Expression Builder',
       shortcuts: [
-        { keys: 'Ctrl+Shift+E', label: 'Export All', description: 'exports all formats at once' },
+        {
+          keys: 'Ctrl+K',
+          label: 'Clear all fields',
+          description: 'reset every field back to the every-minute default',
+        },
+        {
+          keys: 'Ctrl+Shift+C',
+          label: 'Copy expression',
+          description: 'copy the generated cron expression to the clipboard',
+        },
       ],
     },
   ],

@@ -1,33 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { YamlToJsonToolDefinition } from '../../src/tool/tool-definition';
-import type { ToolState } from '../../src/tool/types';
+import { cronTool } from '../../src/tool/cron-state';
+import type { CronState } from '../../src/tool/types';
 
-describe('YamlToJsonToolDefinition', () => {
-  const def = new YamlToJsonToolDefinition();
+describe('CronTool definition', () => {
+  const def = cronTool;
 
-  it('should convert valid YAML to JSON', () => {
-    const state: ToolState = { ...def.initialState, mode: 'yaml-to-json', input: 'name: test\nvalue: 123' };
-    const res = def.convert(state);
-    expect(res.error).toBeNull();
-    expect(JSON.parse(res.output)).toEqual({ name: 'test', value: 123 });
+  it('serializes and deserializes round-trip', () => {
+    const state: CronState = { ...def.initialState, minute: '30', hour: '9' };
+    const json = def.serialize(state);
+    const res = def.deserialize(JSON.parse(json));
+    expect(res.success).toBe(true);
+    if (res.success) expect(res.data).toEqual(state);
   });
 
-  it('should convert valid JSON to YAML', () => {
-    const state: ToolState = { ...def.initialState, mode: 'json-to-yaml', input: '{"name":"test","value":123}' };
-    const res = def.convert(state);
-    expect(res.error).toBeNull();
-    expect(res.output).toContain('name: test');
+  it('rejects an invalid expression (minute 60)', () => {
+    const bad = { ...def.initialState, minute: '60' };
+    const res = def.deserialize(bad);
+    expect(res.success).toBe(false);
+    if (!res.success) expect(res.error).toContain('out of range');
   });
 
-  it('should report syntax errors for bad YAML', () => {
-    const state: ToolState = { ...def.initialState, mode: 'yaml-to-json', input: 'name: [unclosed' };
-    const res = def.convert(state);
-    expect(res.error).not.toBeNull();
-  });
-
-  it('should respect indentation settings', () => {
-    const state: ToolState = { ...def.initialState, mode: 'yaml-to-json', indent: 4, input: 'a: 1' };
-    const res = def.convert(state);
-    expect(res.output).toContain('    ');
+  it('exposes config metadata', () => {
+    expect(def.id).toBe('1795183469');
+    expect(def.name).toBe('Crontab Expression Builder');
+    expect(def.version).toBe('1.0.0');
   });
 });

@@ -1,39 +1,23 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentType,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ToolShell, useTool, ImportExport } from '@itsjust/core';
-import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
+import { compressToEncodedURIComponent } from 'lz-string';
 import {
   toolConfig,
   templateBaseVersion,
   ToolCanvas,
   ToolToolbar,
   ToolSidebar,
+  cronTool,
+  stateFromLocation,
 } from '@/tool';
-import { notepadTool as notepadToolDef, type NotepadState } from '@/tool/notepad-state';
-
-const DEFAULT_FONT_SIZE = 16;
-const MIN_FONT_SIZE = 8;
-const MAX_FONT_SIZE = 72;
+import type { CronState } from '@/tool/types';
 
 export default function ToolClient() {
-  const ToolShellCompat = ToolShell as unknown as ComponentType<Record<string, unknown>> & {
-    Toolbar?: ComponentType<{ children?: ReactNode }>;
-    Body?: ComponentType<{ children?: ReactNode }>;
-    Sidebar?: ComponentType<{ children?: ReactNode }>;
-    Canvas?: ComponentType<{ children?: ReactNode }>;
-    StatusBar?: ComponentType<{ children?: ReactNode }>;
-  };
   const canvasRef = useRef<HTMLDivElement>(null);
-  const tool = useTool<NotepadState>(notepadToolDef, canvasRef);
+  const tool = useTool<CronState>(cronTool, canvasRef);
+  const data = tool.state.data;
   const setToolData = tool.state.setData;
   const showToast = tool.toast;
   const [isSharing, setIsSharing] = useState(false);
@@ -41,60 +25,35 @@ export default function ToolClient() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(
     () => typeof window !== 'undefined' && window.innerWidth > 768 && toolConfig.features.sidebar
   );
-  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
-
-  const title = tool.state.data.title?.trim() || toolConfig.name;
 
   useEffect(() => {
-    document.title = title;
-  }, [title]);
-
-  const handleTextChange = useCallback(
-    (text: string) => {
-      setToolData((prev) => ({ ...prev, content: text }));
-    },
-    [setToolData]
-  );
-
-  const handleFontSizeChange = useCallback((delta: number) => {
-    setFontSize((prev) => Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, prev + delta)));
+    document.title = toolConfig.name;
   }, []);
+
+  /* ------------------------------ shared state ------------------------------ */
 
   useEffect(() => {
     if (hasLoadedSharedState.current) return;
     hasLoadedSharedState.current = true;
-    const params = new URLSearchParams(window.location.search);
-    const encodedState = params.get('state');
-    if (!encodedState) return;
-    try {
-      const serialized = decompressFromEncodedURIComponent(encodedState);
-      if (!serialized) throw new Error('Invalid shared URL');
-      const parsed: unknown = JSON.parse(serialized);
-      const deserialized = notepadToolDef.deserialize(parsed);
-      if (!deserialized.success) throw new Error(deserialized.error);
-      setToolData(deserialized.data);
-      showToast('Loaded state from shared URL', 'success');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load shared URL';
-      showToast(message, 'error');
-    }
+    const shared = stateFromLocation();
+    if (!shared) return;
+    setToolData(shared);
+    showToast('Loaded expression from share link', 'success');
   }, [setToolData, showToast]);
 
   const handleShare = useCallback(async () => {
     setIsSharing(true);
     try {
-      const serialized = notepadToolDef.serialize(tool.state.data);
-      const encodedState = compressToEncodedURIComponent(serialized);
-      if (!encodedState) throw new Error('Failed to encode state for URL');
+      const encoded = cronTool.serialize(tool.state.data);
       const url = new URL(window.location.href);
-      url.searchParams.set('state', encodedState);
+      url.searchParams.set('state', compressToEncodedURIComponent(encoded));
       url.searchParams.set('tool', toolConfig.id);
       window.history.replaceState(null, '', url.toString());
 
       const shareUrl = url.toString();
       if (navigator.share) {
         try {
-          await navigator.share({ title, url: shareUrl });
+          await navigator.share({ title: toolConfig.name, url: shareUrl });
           showToast('Shared URL ready', 'success');
           return;
         } catch (error) {
@@ -109,11 +68,15 @@ export default function ToolClient() {
     } finally {
       setIsSharing(false);
     }
-  }, [showToast, tool.state.data, title]);
+  }, [showToast, tool.state.data]);
+
+  /* -------------------------------- rendering ------------------------------- */
+
+  const toolbarActions = useMemo(() => ({ ...tool.toolbarActions }), [tool.toolbarActions]);
 
   const toolbarContent = (
     <>
-      <ToolToolbar />
+      <ToolToolbar state={data} onChange={setToolData as (s: CronState) => void} />
       <ImportExport
         formats={tool.supportedFormats}
         onExport={tool.handleExport}
@@ -125,16 +88,13 @@ export default function ToolClient() {
     </>
   );
 
-  const sidebarContent = (
-    <ToolSidebar text={tool.state.data.content} fontSize={fontSize} onFontSizeChange={handleFontSizeChange} />
-  );
+  const sidebarContent = <ToolSidebar state={data} />;
 
   const canvasContent = (
     <ToolCanvas
       canvasRef={canvasRef}
-      text={tool.state.data.content}
-      fontSize={fontSize}
-      onChange={handleTextChange}
+      state={data}
+      onChange={setToolData as (s: CronState) => void}
     />
   );
 
@@ -154,7 +114,9 @@ export default function ToolClient() {
           'Ready'
         )}
       </span>
-      <span className="status-slot status-slot-font-size">{fontSize}px</span>
+      <span className="status-slot status-slot-title">
+        {data.useSeconds ? '6-field (with seconds)' : '5-field'}
+      </span>
       <span className="status-slot status-slot-tool-version">Tool v{toolConfig.version}</span>
       <span className="status-slot status-slot-template-version">
         Template v{templateBaseVersion}
@@ -162,50 +124,16 @@ export default function ToolClient() {
     </>
   );
 
-  const hasLegacySections = Boolean(
-    ToolShellCompat.Toolbar &&
-    ToolShellCompat.Body &&
-    ToolShellCompat.Sidebar &&
-    ToolShellCompat.Canvas &&
-    ToolShellCompat.StatusBar
-  );
-
   return (
-    <ToolShellCompat
+    <ToolShell
       config={toolConfig}
-      actions={useMemo(() => tool.toolbarActions, [tool.toolbarActions])}
+      actions={toolbarActions}
       sidebarOpen={sidebarOpen}
       onSidebarChange={setSidebarOpen}
       toolbar={toolbarContent}
       sidebar={sidebarContent}
       canvas={canvasContent}
       statusBar={statusBarContent}
-    >
-      {hasLegacySections
-        ? (() => {
-            const ToolbarSection = ToolShellCompat.Toolbar as ComponentType<{
-              children?: ReactNode;
-            }>;
-            const BodySection = ToolShellCompat.Body as ComponentType<{ children?: ReactNode }>;
-            const SidebarSection = ToolShellCompat.Sidebar as ComponentType<{
-              children?: ReactNode;
-            }>;
-            const CanvasSection = ToolShellCompat.Canvas as ComponentType<{ children?: ReactNode }>;
-            const StatusBarSection = ToolShellCompat.StatusBar as ComponentType<{
-              children?: ReactNode;
-            }>;
-            return (
-              <>
-                <ToolbarSection>{toolbarContent}</ToolbarSection>
-                <BodySection>
-                  <SidebarSection>{sidebarContent}</SidebarSection>
-                  <CanvasSection>{canvasContent}</CanvasSection>
-                </BodySection>
-                <StatusBarSection>{statusBarContent}</StatusBarSection>
-              </>
-            );
-          })()
-        : null}
-    </ToolShellCompat>
+    />
   );
 }
